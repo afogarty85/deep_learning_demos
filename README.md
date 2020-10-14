@@ -9,3 +9,5 @@ This repository contains start-to-finish data processing and deep learning algor
 3. Feature Normalization and Initialization. PyTorch Implementation: [Code](https://github.com/afogarty85/deep_learning_demos/blob/master/feature_init.py)
 
 4. Rectified Adam. PyTorch Implementation: [Code](https://github.com/afogarty85/deep_learning_demos/blob/master/utils/radam.py)
+
+5. Optimization. Manual Implementation of Gradient Descent and Backward Propagation: [Code](https://github.com/afogarty85/deep_learning_demos/blob/master/optimization.py)
