@@ -148,16 +148,6 @@ class LR():
         grad_loss_b = -torch.sum(grad_loss_out)
         return grad_loss_w, grad_loss_b
 
-    def predict_labels(self, x):
-        probas = self.forward(x)
-        labels = torch.where(probas > 0.5, torch.tensor(1, device=device), torch.tensor(0, device=device)).view(-1)
-        return labels
-
-    def evaluate(self, x, y):
-        labels = self.predict_labels(x).float()
-        accuracy = torch.sum(labels.view(-1) == y.float()).item() / y.size(0)
-        return accuracy
-
     def _logit_cost(self, y, probas):
         tmp1 = torch.mm(-y.view(1, -1), torch.log(probas.view(-1, 1)))
         tmp2 = torch.mm((1 - y).view(1, -1), torch.log(1 - probas.view(-1, 1)))
@@ -422,4 +412,8 @@ ridge = Ridge(alpha=alpha*1000, solver='sag').fit(x, y)
 ridge.coef_
 ridge.intercept_
 
+# check error
+pred1 = ridge.predict(x)
+from sklearn.metrics import mean_squared_error
+mean_squared_error(y, pred1)
 ###
