@@ -11,7 +11,7 @@ sys.path.append("C:/Users/Andrew/Desktop/Projects/Deep Learning/utils")
 from tools import AverageMeter, ProgressBar
 
 
-SEED = 15
+SEED = 123
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 torch.cuda.amp.autocast(enabled=True)
@@ -124,7 +124,13 @@ train_ds, test_ds = torch.utils.data.random_split(csv_dataset, [train_size, test
 
 # create manual logistic regression model
 class LR():
+    ''' Stochastic Gradient Descent Logistic Regression Model '''
     def __init__(self, num_features, LAMBDA=0.0):
+        """
+        Args:
+            num_features (int): Number of independent variables
+            LAMBDA (float): L2 Regularization (Ridge)
+        """
         self.num_features = num_features
         self.weights = torch.zeros(1, num_features,
                                    dtype=torch.float32, device=device)
@@ -236,7 +242,7 @@ def test(dataloader):
         prediction = torch.where(probas > 0.5, torch.tensor(1, device=device), torch.tensor(0, device=device)).view(-1)
         # compare
         correct = prediction.eq(batch['target']).sum().item()
-        valid_loss.update(loss, n=batch['features'].size(0))
+        valid_loss.update(loss.item(), n=batch['features'].size(0))
         valid_acc.update(correct, n=1)
         count += batch['features'].size(0)
         pbar(step=batch_idx)
@@ -272,3 +278,148 @@ C = 1 / LAMBDA
 clf = LogisticRegression(solver='lbfgs', penalty='l2', C=C).fit(X, y)
 clf.coef_
 clf.intercept_
+
+
+
+#### Linear Models with SGD ####
+df = pd.read_csv('https://raw.githubusercontent.com/rasbt/stat479-deep-learning-ss19/master/L05_grad-descent/code/datasets/linreg-data.csv', index_col=0)
+X = df[['x1', 'x2']].values
+y = df['y'].values
+df = pd.DataFrame({'x1': X[:, 0], 'x2': X[:, 1], 'y': y})
+
+# save df
+df.to_csv('regression_demo.csv', index=False)
+
+
+class ToTensor():
+    # retrieve sample and unpack it
+    def __call__(self, sample):
+        features, target, idx = (sample['features'],
+                              sample['target'],
+                              sample['idx'])
+
+        # yield another dict
+        return {'features': torch.as_tensor(features,
+                                         dtype=torch.float32,
+                                         device=device),
+                'target': torch.as_tensor(target,
+                                          dtype=torch.float32,
+                                          device=device),
+                'idx': torch.as_tensor(idx,
+                                       dtype=torch.int,
+                                       device=device)}
+
+# instantiate the lazy data set
+csv_dataset = CSVDataset(csv_file='regression_demo.csv', transform=ToTensor())
+
+# create manual ols model
+class LM():
+    ''' Stochastic Gradient Descent Linear Model '''
+
+    def __init__(self, num_features, LAMBDA=0.0):
+        """
+        Args:
+            num_features (int): Number of independent variables
+            LAMBDA (float): L2 Regularization (Ridge)
+        """
+        # set num. dimensions
+        self.num_features = num_features
+        # initialize weights as zeros
+        self.weights = torch.zeros(1, num_features,
+                                   dtype=torch.float32, device=device)
+        # initialize bias as zeros
+        self.bias = torch.zeros(1, dtype=torch.float32, device=device)
+        # initialize LAMBDA
+        self.LAMBDA = LAMBDA
+
+    def forward(self, x):
+        # linear combination
+        linear = torch.add(torch.mm(x, self.weights.t()), self.bias).view(-1)
+        # activation = identity(x) = x
+        pass  # do nothing for activation
+        return linear
+
+    def backward(self, x, y, y_hat):
+        # find gradient loss
+        grad_loss_out = y - y_hat.view(-1)
+        # chain rule: find loss for weights
+        grad_loss_w = 2 * -torch.mm(x.t(), grad_loss_out.view(-1, 1)) / y.size(0)
+        # chain rule: find loss for bias
+        grad_loss_b = 2 * -torch.sum(grad_loss_out) / y.size(0)
+        return grad_loss_w, grad_loss_b
+
+    def loss(self, y_hat, y):
+        # mean squared error
+        return torch.mean((y_hat - y)**2)
+
+
+# create DataLoaders
+train_dataloader = DataLoader(csv_dataset,
+                              batch_size=100,
+                              sampler=None,
+                              shuffle=True)
+
+# check data
+for i, batch in enumerate(train_dataloader):
+    if i == 0:
+        break
+
+# set epochs
+epochs = 40
+
+# set lr
+learning_rate = 0.05
+
+# instantiate model
+model = LM(num_features=2, LAMBDA=10.0)
+
+# prepare training function
+def train(dataloader):
+    pbar = ProgressBar(n_total=len(dataloader), desc='Training')
+    train_loss = AverageMeter()
+    for batch_idx, batch in enumerate(dataloader):
+        # forward
+        y_hat = model.forward(batch['features'].float())
+        # backward
+        grad_w, grad_b = model.backward(batch['features'],
+                                        batch['target'],
+                                        y_hat)
+        # manual regularization
+        l2_reg = (model.LAMBDA * model.weights)
+        l2_reg = l2_reg.reshape(2, 1)
+        # update weights
+        model.weights -= learning_rate * (grad_w + l2_reg).view(-1)
+        model.bias -= (learning_rate * grad_b).view(-1)
+        # record loss
+        loss = model.loss(batch['target'], y_hat)
+        # update meter
+        train_loss.update(loss.item(), n=1)
+        # update progress bar
+        pbar(step=batch_idx, info={'batch_loss': loss.item()})
+    return {'train_loss': train_loss.avg}
+
+
+# training
+for epoch in range(1, epochs + 1):
+    train_log = train(train_dataloader)
+    logs = dict(train_log)
+    train_logs = f'\nEpoch: {epoch} - ' + "-".join([f' {key}: {value:.4f} ' for key, value in logs.items()])
+    print(train_logs)
+
+print('Weights', model.weights)
+print('Bias', model.bias)
+
+# sklearn ridge
+from sklearn.linear_model import Ridge
+LAMBDA = 10.0
+# C = inverse of lambda
+C = 1/LAMBDA
+# alpha = 1 / (2C)
+alpha = 1 / (2*C)
+x = np.ascontiguousarray(X)
+# alpha * N obs for ridge
+ridge = Ridge(alpha=alpha*1000, solver='sag').fit(x, y)
+ridge.coef_
+ridge.intercept_
+
+###
