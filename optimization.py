@@ -133,7 +133,7 @@ class LR():
         """
         self.num_features = num_features
         self.weights = torch.zeros(1, num_features,
-                                   dtype=torch.float32, device=device)
+                                   dtype=torch.float32, device=device).normal_(0.0, 0.1)
         self.bias = torch.zeros(1, dtype=torch.float32, device=device)
         self.LAMBDA = LAMBDA
 
@@ -316,7 +316,7 @@ class LM():
         self.num_features = num_features
         # initialize weights as zeros
         self.weights = torch.zeros(1, num_features,
-                                   dtype=torch.float32, device=device)
+                                   dtype=torch.float32, device=device).normal_(0.0, 0.1)
         # initialize bias as zeros
         self.bias = torch.zeros(1, dtype=torch.float32, device=device)
         # initialize LAMBDA
@@ -374,8 +374,8 @@ def train(dataloader):
         grad_w, grad_b = model.backward(batch['features'],
                                         batch['target'],
                                         y_hat)
-        # manual regularization
-        l2_reg = (model.LAMBDA * model.weights)
+        # manual regularization\
+        l2_reg = model.LAMBDA * model.weights
         l2_reg = l2_reg.reshape(2, 1)
         # update weights
         model.weights -= learning_rate * (grad_w + l2_reg).view(-1)
